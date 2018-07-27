@@ -1,0 +1,9 @@
+.idea
+logdir*
+*.py[cod]
+.DS_Store
+outputs
+datasets/
+logdir/*
+TIMIT/*
+__*
