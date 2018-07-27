@@ -7,7 +7,7 @@ import tensorflow as tf
 
 from data_load import get_batch_queue, load_vocab, load_data
 from hparams import Default as hp_default
-from modules import prenet, cbhg
+from modules import prenet, cbhg, gru, normalize
 import hparams as hp
 
 
@@ -18,13 +18,18 @@ class Model:
         self.queue = queue
         self.is_training = self.get_is_training(mode)
 
-        # Input
+        # Input Generator
         self.x_mfcc, self.y_ppgs, self.y_spec, self.y_mel, self.num_batch = self.get_input(mode, batch_size, queue)
         self.z = tf.placeholder(tf.float32, shape=(batch_size, None, hp.Train2.noize_depth))
 
+        # Input Discriminator
+        self.d_input = tf.placeholder(tf.float32, shape=(batch_size, None, 1 + hp_default.n_fft // 2 + 61))  # (N, T, spec_size + ppgs_h)
+
         # Networks
         self.net_template = tf.make_template('net', self._net2)
+        self.net_D = tf.make_template('netD', self._netD)
         self.ppgs, self.pred_ppg, self.logits_ppg, self.pred_spec, self.pred_mel = self.net_template()
+        self.net_D()
 
     def __call__(self):
         return self.pred_spec
@@ -128,7 +133,43 @@ class Model:
         loss = loss_spec + loss_mel
         return loss
 
-    def _D(self):
+    def _netD(self):
+        with tf.variable_scope('net_D'):
+
+            # Pre-net
+            prenet_out = prenet(self.d_input,
+                                num_units=[hp.Train1.hidden_units, hp.Train1.hidden_units // 2],
+                                dropout_rate=hp.Train1.dropout_rate,
+                                is_training=self.is_training)  # (N, T, E/2)
+
+            # CBHG
+            out = cbhg(prenet_out, hp.Train1.num_banks, hp.Train1.hidden_units // 2, hp.Train1.num_highway_blocks,
+                       hp.Train1.norm_type, self.is_training, scope="cbhg1")
+
+            # CBHG2
+            out = tf.layers.dense(out, hp.Train1.hidden_units // 2)
+            out = cbhg(out, hp.Train1.num_banks, hp.Train1.hidden_units // 2, hp.Train1.num_highway_blocks,
+                             hp.Train1.norm_type, self.is_training, scope="cbhg2")
+
+            # recurrent
+            out = gru(out, hp.Train1.hidden_units // 2, True)
+
+            ## Disciriminator output
+            out = out[:, -1, :]
+            # memory = tf.normalize(memory, reuse=reuse)
+            W_dis = tf.get_variable("weights", shape=[hp.Train1.hidden_units, 1])
+            b_dis = tf.get_variable("bias", shape=[1])
+            out = tf.sigmoid(tf.matmul(out, W_dis) + b_dis)
+
+
+            # # Final linear projection
+            # logits = tf.layers.dense(out, len(phn2idx))  # (N, T, V)
+            # ppgs = tf.nn.softmax(logits / hp.Train1.t)  # (N, T, V)
+            # preds = tf.to_int32(tf.arg_max(logits, dimension=-1))  # (N, T)
+
+            return out
+
+    def loss_D(self):
         pass
 
     @staticmethod
