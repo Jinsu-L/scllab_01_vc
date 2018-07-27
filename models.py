@@ -19,17 +19,45 @@ class Model:
         self.is_training = self.get_is_training(mode)
 
         # Input Generator
-        self.x_mfcc, self.y_ppgs, self.y_spec, self.y_mel, self.num_batch = self.get_input(mode, batch_size, queue)
+        self.x_mfcc = tf.placeholder(tf.float32, shape=(batch_size, None, hp_default.n_mfcc))
+        self.y_ppgs = tf.placeholder(tf.int32, shape=(batch_size, None,))
+        self.y_spec = tf.placeholder(tf.float32, shape=(batch_size, None, 1 + hp_default.n_fft // 2))
+        self.y_mel = tf.placeholder(tf.float32, shape=(batch_size, None, hp_default.n_mels))
+
+        wav_files = load_data(mode=mode)
+        self.num_batch = len(wav_files) // batch_size
+
         self.z = tf.placeholder(tf.float32, shape=(batch_size, None, hp.Train2.noize_depth))
 
-        # Input Discriminator
-        self.d_input = tf.placeholder(tf.float32, shape=(batch_size, None, 1 + hp_default.n_fft // 2 + 61))  # (N, T, spec_size + ppgs_h)
-
         # Networks
-        self.net_template = tf.make_template('net', self._net2)
+        self.net_G = tf.make_template('net', self._net2)
         self.net_D = tf.make_template('netD', self._netD)
-        self.ppgs, self.pred_ppg, self.logits_ppg, self.pred_spec, self.pred_mel = self.net_template()
-        self.net_D()
+
+        # G output
+        self.ppgs, self.pred_ppg, self.logits_ppg, self.pred_spec, self.pred_mel = self.net_G(self.x_mfcc, self.z)
+
+        # real_D
+        real_input = tf.concat([self.y_spec, self.ppgs], 2)
+        self.real_d_logit = self.net_D(real_input)
+
+        # fake_D
+        fake_input = tf.concat([self.pred_spec, self.ppgs], 2)
+        self.fake_d_logit = self.net_D(fake_input, True)
+
+        # todo 여기서 바로 loss 를 만들고 밑에서는 단순히 리턴만하면 어떨까? => 잘되는 거 같음
+        #  net_G l2 loss - 일단 spectrogram loss 만
+        loss_spec = tf.reduce_mean(tf.squared_difference(self.pred_spec, self.y_spec))
+        # loss_mel = tf.reduce_mean(tf.squared_difference(self.pred_mel, self.y_mel))
+        self.net_G_loss = loss_spec
+
+        # adv loss
+        self.D_adv_loss = -tf.reduce_mean(tf.log(self.real_d_logit) + tf.log(1 - self.fake_d_logit))
+        self.G_adv_loss = -tf.reduce_mean(tf.log(self.fake_d_logit))
+
+        # todo : 기본 loss로 구현 했는데 cross entropy로 loss 구현 하기도 하는 거 같음 but 아직 cross entropy에 대하여 이해가 필요
+        # todo 간단하게 adv loss는 만들었으니 각각 loss리턴 함수 만들고 train2 에서 optimizer 만들어서 구조 만들면 될 듯
+        # one-sided label smoothing을 고려 - cross entropy로 바꿀 때 고려 해볼 것 G grad 폭발을 조금 막아준다고 함
+
 
     def __call__(self):
         return self.pred_spec
@@ -65,13 +93,13 @@ class Model:
             is_training = False
         return is_training
 
-    def _net1(self):
+    def _net1(self, x_mfcc):
         with tf.variable_scope('net1'):
             # Load vocabulary
             phn2idx, idx2phn = load_vocab()
 
             # Pre-net
-            prenet_out = prenet(self.x_mfcc,
+            prenet_out = prenet(x_mfcc,
                                 num_units=[hp.Train1.hidden_units, hp.Train1.hidden_units // 2],
                                 dropout_rate=hp.Train1.dropout_rate,
                                 is_training=self.is_training)  # (N, T, E/2)
@@ -101,12 +129,12 @@ class Model:
         acc = num_hits / num_targets
         return acc
 
-    def _net2(self):
+    def _net2(self, x_mfcc, z):
         # PPGs from net1
-        ppgs, preds_ppg, logits_ppg = self._net1()
+        ppgs, preds_ppg, logits_ppg = self._net1(x_mfcc)
 
         with tf.variable_scope('net2'):
-            noise_ppgs = tf.concat([ppgs, self.z], 2)
+            noise_ppgs = tf.concat([ppgs, z], 2)
 
             # Pre-net
             prenet_out = prenet(noise_ppgs,
@@ -128,16 +156,12 @@ class Model:
         return ppgs, preds_ppg, logits_ppg, pred_spec, pred_mel
 
     def loss_net2(self):
-        loss_spec = tf.reduce_mean(tf.squared_difference(self.pred_spec, self.y_spec))
-        loss_mel = tf.reduce_mean(tf.squared_difference(self.pred_mel, self.y_mel))
-        loss = loss_spec + loss_mel
-        return loss
+        return self.net_G_loss
 
-    def _netD(self):
-        with tf.variable_scope('net_D'):
-
+    def _netD(self, d_input, reuse=False):
+        with tf.variable_scope('net_D', reuse=reuse):
             # Pre-net
-            prenet_out = prenet(self.d_input,
+            prenet_out = prenet(d_input,
                                 num_units=[hp.Train1.hidden_units, hp.Train1.hidden_units // 2],
                                 dropout_rate=hp.Train1.dropout_rate,
                                 is_training=self.is_training)  # (N, T, E/2)
@@ -149,7 +173,7 @@ class Model:
             # CBHG2
             out = tf.layers.dense(out, hp.Train1.hidden_units // 2)
             out = cbhg(out, hp.Train1.num_banks, hp.Train1.hidden_units // 2, hp.Train1.num_highway_blocks,
-                             hp.Train1.norm_type, self.is_training, scope="cbhg2")
+                       hp.Train1.norm_type, self.is_training, scope="cbhg2")
 
             # recurrent
             out = gru(out, hp.Train1.hidden_units // 2, True)
@@ -161,7 +185,6 @@ class Model:
             b_dis = tf.get_variable("bias", shape=[1])
             out = tf.sigmoid(tf.matmul(out, W_dis) + b_dis)
 
-
             # # Final linear projection
             # logits = tf.layers.dense(out, len(phn2idx))  # (N, T, V)
             # ppgs = tf.nn.softmax(logits / hp.Train1.t)  # (N, T, V)
@@ -169,7 +192,9 @@ class Model:
 
             return out
 
-    def loss_D(self):
+    def loss_adv(self):
+        G = self._net2()
+
         pass
 
     @staticmethod
