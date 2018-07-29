@@ -241,7 +241,7 @@ def get_batch_queue(mode, batch_size):
             return mfcc, spec, mel, num_batch
 
 
-def get_batch(mode, batch_size):
+def get_batch(mode):
     '''Loads data.
     mode: A string. Either `train1` | `test1` | `train2` | `test2` | `convert`.
     '''
@@ -253,7 +253,7 @@ def get_batch(mode, batch_size):
         # Load data
         wav_files = load_data(mode=mode)
 
-        target_wavs = sample(wav_files, batch_size)
+        target_wavs = sample(wav_files, len(wav_files))
 
         if mode in ('train1', 'test1'):
             mfcc, ppg = map(_get_zero_padded, zip(*map(lambda w: get_mfccs_and_phones(w, hp_default.sr), target_wavs)))

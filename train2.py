@@ -46,12 +46,15 @@ def train(logdir1='logdir/default/train1', logdir2='logdir/default/train2', queu
         threads = tf.train.start_queue_runners(coord=coord)
 
         for epoch in range(1, hp.Train2.num_epochs + 1):
+            mfcc_batch,spec_batch,mel_batch=get_batch(model.mode)
             for step in range(model.num_batch):
                 print('epoch : ' + str(epoch) + ' step : ' + str(step))
                 if queue:
                     sess.run(train_op)
                 else:
-                    mfcc, spec, mel = get_batch(model.mode, model.batch_size)
+                    mfcc=mfcc_batch[step*model.num_batch:(step+1)*model.num_batch]
+                    spec=spec_batch[step*model.num_batch:(step+1)*model.num_batch]
+                    mel=mel_batch[step*model.num_batch:(step+1)*model.num_batch]
                     z = np.random.normal(size=(model.batch_size, np.shape(mfcc)[1], hp.Train2.noize_depth))
                     sess.run(train_op, feed_dict={model.x_mfcc: mfcc, model.y_spec: spec, model.y_mel: mel, model.z: z})
 
