@@ -241,7 +241,7 @@ def get_batch_queue(mode, batch_size):
             return mfcc, spec, mel, num_batch
 
 
-def get_batch(mode,batch_size):
+def get_batch(mode,batch_size=0):
     '''Loads data.
     mode: A string. Either `train1` | `test1` | `train2` | `test2` | `convert`.
     '''
