@@ -52,9 +52,9 @@ def train(logdir1='logdir/default/train1', logdir2='logdir/default/train2', queu
                 if queue:
                     sess.run(train_op)
                 else:
-                    mfcc=mfcc_batch[step*model.num_batch:(step+1)*model.num_batch]
-                    spec=spec_batch[step*model.num_batch:(step+1)*model.num_batch]
-                    mel=mel_batch[step*model.num_batch:(step+1)*model.num_batch]
+                    mfcc=mfcc_batch[step*model.batch_size:(step+1)*model.batch_size]
+                    spec=spec_batch[step*model.batch_size:(step+1)*model.batch_size]
+                    mel=mel_batch[step*model.batch_size:(step+1)*model.batch_size]
                     z = np.random.normal(size=(model.batch_size, np.shape(mfcc)[1], hp.Train2.noize_depth))
                     sess.run(train_op, feed_dict={model.x_mfcc: mfcc, model.y_spec: spec, model.y_mel: mel, model.z: z})
 
