@@ -51,9 +51,13 @@ class Model:
         self.net_G_loss = loss_spec
 
         # adv loss
-        self.D_adv_loss = -tf.reduce_mean(tf.log(self.real_d_logit) + tf.log(1 - self.fake_d_logit))
-        self.G_adv_loss = -tf.reduce_mean(tf.log(self.fake_d_logit))
-
+        # self.D_adv_loss = -tf.reduce_mean(tf.log(self.real_d_logit) + tf.log(1 - self.fake_d_logit))
+        # self.G_adv_loss = -tf.reduce_mean(tf.log(self.fake_d_logit))
+        # cross entropy로 변경. cross entropy를 쓰는 이유는 기존의 loss function은 D와 G에 대한 loss를 줄이는 방향으로 갈 뿐이지
+        # 우리가 원하는 D의 출력이 G나 Real Data에 대한 결과인 0 혹은 1이 나오도록 의도하고 있지 않기 때문에, 명확하게 방향을 정해주는 역할.
+        self.D_adv_loss = -tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.real_d_logit, labels=tf.ones_like(self.real_d_logit))
+                                          + tf.nn.sigmoid_cross_entropy_with_logits(logits=self.fake_d_logit, labels=tf.zeros_like(self.fake_d_logit)))
+        self.G_adv_loss = -tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.fake_d_logit,labels=tf.ones_like(self.fake_d_logit)))
         # todo : 기본 loss로 구현 했는데 cross entropy로 loss 구현 하기도 하는 거 같음 but 아직 cross entropy에 대하여 이해가 필요
         # todo 간단하게 adv loss는 만들었으니 각각 loss리턴 함수 만들고 train2 에서 optimizer 만들어서 구조 만들면 될 듯
         # one-sided label smoothing을 고려 - cross entropy로 바꿀 때 고려 해볼 것 G grad 폭발을 조금 막아준다고 함
