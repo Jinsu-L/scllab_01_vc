@@ -63,7 +63,7 @@ def train(logdir1='logdir/default/train1', logdir2='logdir/default/train2', queu
                                     feed_dict={model.x_mfcc: mfcc, model.y_spec: spec, model.y_mel: mel, model.z: z})
 
             if epoch % hp.Train2.save_per_epoch == 0:
-                saver.save(sess, '{}/epoch_{}_step_{}'.format(logdwir2, epoch, gs))
+                saver.save(sess, '{}/epoch_{}_step_{}'.format(logdir2, epoch, gs))
 
                 # Eval at every n epochs
                 with tf.Graph().as_default():
