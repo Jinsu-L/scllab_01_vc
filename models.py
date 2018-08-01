@@ -29,13 +29,13 @@ class Model:
 
         self.z = tf.placeholder(tf.float32, shape=(batch_size, None, hp.Train2.noize_depth))
 
-        # Networks
+        # Network G 각 네트워크별 스코프 지정
         self.net_G = tf.make_template('net', self._net2)
-        self.net_D = tf.make_template('netD', self._netD)
-
         # G output
         self.ppgs, self.pred_ppg, self.logits_ppg, self.pred_spec, self.pred_mel = self.net_G(self.x_mfcc, self.z)
 
+        # Network D 각 네트워크별 스코프 지정
+        self.net_D = tf.make_template('netD', self._netD)
         # real_D
         real_input = tf.concat([self.y_spec, self.ppgs], 2)
         self.real_d_logit = self.net_D(real_input)
@@ -43,6 +43,12 @@ class Model:
         # fake_D
         fake_input = tf.concat([self.pred_spec, self.ppgs], 2)
         self.fake_d_logit = self.net_D(fake_input, True)
+
+        # Train Variables 추
+        t_vars = tf.trainable_variables()
+
+        self.d_vars = [var for var in t_vars if 'net_D' in var.name]
+        self.g_vars = [var for var in t_vars if 'net2' in var.name]
 
         # todo 여기서 바로 loss 를 만들고 밑에서는 단순히 리턴만하면 어떨까? => 잘되는 거 같음
         #  net_G l2 loss - 일단 spectrogram loss 만
@@ -62,6 +68,9 @@ class Model:
         # todo 간단하게 adv loss는 만들었으니 각각 loss리턴 함수 만들고 train2 에서 optimizer 만들어서 구조 만들면 될 듯
         # one-sided label smoothing을 고려 - cross entropy로 바꿀 때 고려 해볼 것 G grad 폭발을 조금 막아준다고 함
 
+        #Optimizer 추가 변수리스트 적용 완료
+        self.G_train_step = tf.train.AdamOptimizer().minimize((self.net_G_loss + self.G_adv_loss), var_list=self.g_vars)
+        self.D_train_step = tf.train.AdamOptimizer().minimize(self.D_adv_loss, var_list=self.d_vars)
 
     def __call__(self):
         return self.pred_spec
@@ -166,7 +175,7 @@ class Model:
         return self.D_adv_loss
 
     def loss_adv_g(self):
-        return self.G_adv_loss
+        return self.G_adv_loss + self.net_G_loss
 
     def _netD(self, d_input, reuse=False):
         with tf.variable_scope('net_D', reuse=reuse):
@@ -224,8 +233,12 @@ class Model:
             if Model._load_variables(sess, logdir, var_list=var_list1):
                 print_model_loaded(mode, logdir)
 
-            var_list2 = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'net/net2')
+            var_list2 = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'net/net_D')
             if Model._load_variables(sess, logdir2, var_list=var_list2):
+                print_model_loaded(mode, logdir2)
+
+            var_list3 = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'net/net2')
+            if Model._load_variables(sess, logdir2, var_list=var_list3):
                 print_model_loaded(mode, logdir2)
 
         elif mode in ['test2', 'convert']:
