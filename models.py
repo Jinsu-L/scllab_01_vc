@@ -162,6 +162,12 @@ class Model:
     def loss_net2(self):
         return self.net_G_loss
 
+    def loss_adv_d(self):
+        return self.D_adv_loss
+
+    def loss_adv_g(self):
+        return self.G_adv_loss
+
     def _netD(self, d_input, reuse=False):
         with tf.variable_scope('net_D', reuse=reuse):
             # Pre-net
