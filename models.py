@@ -203,9 +203,9 @@ class Model:
             return out
 
     def loss_adv(self):
-        G = self._net2()
-
-        pass
+        # G = self._net2()
+        return self.G_adv_loss + self.D_adv_loss
+        # pass
 
     @staticmethod
     def load(sess, mode, logdir, logdir2=None):
