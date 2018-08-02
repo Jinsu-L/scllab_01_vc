@@ -75,10 +75,10 @@ class Train2:
     norm_type = 'ins'  # a normalizer function. value: bn, ln, ins, or None
     t = 1.0  # temperature
     dropout_rate = 0.1
-    noize_depth = 60
+    noise_depth = 60
 
     # train
-    batch_size = 16
+    batch_size = 8
     lr = 0.0006
     num_epochs = 10000
     save_per_epoch = 50
@@ -94,7 +94,7 @@ class Test1:
 
 class Test2:
     # test
-    batch_size = 32
+    batch_size = 1
 
 
 class Convert:
