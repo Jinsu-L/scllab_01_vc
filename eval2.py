@@ -16,7 +16,7 @@ def eval(logdir='logdir/default/train2', queue=True):
     model = Model(mode="test2", batch_size=hp.Test2.batch_size, queue=queue)
 
     # Loss
-    loss_op = model.loss_net2()
+    loss_op = model.total_loss()
 
     # Summary
     summ_op = summaries(loss_op)

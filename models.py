@@ -27,15 +27,15 @@ class Model:
         wav_files = load_data(mode=mode)
         self.num_batch = len(wav_files) // batch_size
 
-        self.z = tf.placeholder(tf.float32, shape=(batch_size, None, hp.Train2.noize_depth))
+        self.z = tf.placeholder(tf.float32, shape=(batch_size, None, hp.Train2.noise_depth))
 
-        # Networks
-        self.net_G = tf.make_template('net', self._net2)
-        self.net_D = tf.make_template('netD', self._netD)
-
+        # Network G 각 네트워크별 스코프 지정
+        self.net_G = tf.make_template('net', self._netG)
         # G output
         self.ppgs, self.pred_ppg, self.logits_ppg, self.pred_spec, self.pred_mel = self.net_G(self.x_mfcc, self.z)
 
+        # Network D 각 네트워크별 스코프 지정
+        self.net_D = tf.make_template('net_D', self._netD)
         # real_D
         real_input = tf.concat([self.y_spec, self.ppgs], 2)
         self.real_d_logit = self.net_D(real_input)
@@ -43,6 +43,12 @@ class Model:
         # fake_D
         fake_input = tf.concat([self.pred_spec, self.ppgs], 2)
         self.fake_d_logit = self.net_D(fake_input, True)
+
+        # Train Variables 추
+        t_vars = tf.trainable_variables()
+
+        self.d_vars = [var for var in t_vars if 'net_D/netD' in var.name]
+        self.g_vars = [var for var in t_vars if 'net/netG' in var.name]
 
         # todo 여기서 바로 loss 를 만들고 밑에서는 단순히 리턴만하면 어떨까? => 잘되는 거 같음
         #  net_G l2 loss - 일단 spectrogram loss 만
@@ -62,33 +68,13 @@ class Model:
         # todo 간단하게 adv loss는 만들었으니 각각 loss리턴 함수 만들고 train2 에서 optimizer 만들어서 구조 만들면 될 듯
         # one-sided label smoothing을 고려 - cross entropy로 바꿀 때 고려 해볼 것 G grad 폭발을 조금 막아준다고 함
 
+        #Optimizer 추가 변수리스트 적용 완료
+        self.G_train_step = tf.train.AdamOptimizer().minimize((self.net_G_loss + self.G_adv_loss), var_list=self.g_vars)
+        self.D_train_step = tf.train.AdamOptimizer().minimize(self.D_adv_loss, var_list=self.d_vars)
 
     def __call__(self):
         return self.pred_spec
 
-    def get_input(self, mode, batch_size, queue):
-        '''
-        mode: A string. One of the phases below:
-          `train1`: TIMIT TRAIN waveform -> mfccs (inputs) -> PGGs -> phones (target) (ce loss)
-          `test1`: TIMIT TEST waveform -> mfccs (inputs) -> PGGs -> phones (target) (accuracy)
-          `train2`: ARCTIC SLT waveform -> mfccs -> PGGs (inputs) -> spectrogram (target)(l2 loss)
-          `test2`: ARCTIC SLT waveform -> mfccs -> PGGs (inputs) -> spectrogram (target)(accuracy)
-          `convert`: ARCTIC BDL waveform -> mfccs (inputs) -> PGGs -> spectrogram -> waveform (output)
-        '''
-        if mode not in ('train1', 'test1', 'train2', 'test2', 'convert'):
-            raise Exception("invalid mode={}".format(mode))
-
-        x_mfcc = tf.placeholder(tf.float32, shape=(batch_size, None, hp_default.n_mfcc))
-        y_ppgs = tf.placeholder(tf.int32, shape=(batch_size, None,))
-        y_spec = tf.placeholder(tf.float32, shape=(batch_size, None, 1 + hp_default.n_fft // 2))
-        y_mel = tf.placeholder(tf.float32, shape=(batch_size, None, hp_default.n_mels))
-
-        # Load data
-        wav_files = load_data(mode=mode)
-        # calc total batch count
-        num_batch = len(wav_files) // batch_size
-
-        return x_mfcc, y_ppgs, y_spec, y_mel, num_batch
 
     def get_is_training(self, mode):
         if mode in ('train1', 'train2'):
@@ -133,11 +119,11 @@ class Model:
         acc = num_hits / num_targets
         return acc
 
-    def _net2(self, x_mfcc, z):
+    def _netG(self, x_mfcc, z):
         # PPGs from net1
         ppgs, preds_ppg, logits_ppg = self._net1(x_mfcc)
 
-        with tf.variable_scope('net2'):
+        with tf.variable_scope('netG'):
             noise_ppgs = tf.concat([ppgs, z], 2)
 
             # Pre-net
@@ -159,11 +145,17 @@ class Model:
 
         return ppgs, preds_ppg, logits_ppg, pred_spec, pred_mel
 
-    def loss_net2(self):
-        return self.net_G_loss
+    def total_loss(self):
+        return self.loss_adv_g() + self.loss_adv_d()
+
+    def loss_adv_d(self):
+        return self.D_adv_loss
+
+    def loss_adv_g(self):
+        return self.G_adv_loss + self.net_G_loss
 
     def _netD(self, d_input, reuse=False):
-        with tf.variable_scope('net_D', reuse=reuse):
+        with tf.variable_scope('netD', reuse=reuse):
             # Pre-net
             prenet_out = prenet(d_input,
                                 num_units=[hp.Train1.hidden_units, hp.Train1.hidden_units // 2],
@@ -197,9 +189,9 @@ class Model:
             return out
 
     def loss_adv(self):
-        G = self._net2()
-
-        pass
+        # G = self._net2()
+        return self.G_adv_loss + self.D_adv_loss
+        # pass
 
     @staticmethod
     def load(sess, mode, logdir, logdir2=None):
@@ -218,8 +210,12 @@ class Model:
             if Model._load_variables(sess, logdir, var_list=var_list1):
                 print_model_loaded(mode, logdir)
 
-            var_list2 = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'net/net2')
+            var_list2 = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'net_D/netD')
             if Model._load_variables(sess, logdir2, var_list=var_list2):
+                print_model_loaded(mode, logdir2)
+
+            var_list3 = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'net/netG')
+            if Model._load_variables(sess, logdir2, var_list=var_list3):
                 print_model_loaded(mode, logdir2)
 
         elif mode in ['test2', 'convert']:
