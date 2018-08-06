@@ -32,7 +32,7 @@ def train(logdir1='logdir/default/train1', logdir2='logdir/default/train2', queu
     d_adv_loss = model.loss_adv_d()
     total_adv_loss = model.loss_adv()
     # Summary
-    summ_op = summaries(loss_op)
+    summ_op = summaries(total_adv_loss)
 
     session_conf = tf.ConfigProto(
         gpu_options=tf.GPUOptions(
@@ -74,7 +74,7 @@ def train(logdir1='logdir/default/train1', logdir2='logdir/default/train2', queu
 
             if epoch % hp.Train2.save_per_epoch == 0:
                 saver.save(sess,
-                           '{}/epoch_{}_step_{}'.format(logdir2, epoch))
+                           '{}/epoch_{}_step_{}'.format(logdir2, epoch, gs))
                 # Eval at every n epochs
                 with tf.Graph().as_default():
                     eval2.eval(logdir2, queue=False)
