@@ -50,8 +50,8 @@ def train(logdir1='logdir/default/train1', logdir2='logdir/default/train2', queu
         threads = tf.train.start_queue_runners(coord=coord)
 
         for epoch in range(1, hp.Train2.num_epochs + 1):
+            mfcc_batch,spec_batch,mel_batch=get_batch(model.mode)
             for step in range(model.num_batch):
-
                 # if queue:
                 #     sess.run(train_op)
                 # else:
@@ -63,6 +63,7 @@ def train(logdir1='logdir/default/train1', logdir2='logdir/default/train2', queu
                          feed_dict={model.x_mfcc: mfcc, model.y_spec: spec, model.y_mel: mel, model.z: z})
                 print('epoch : ' + str(epoch) + ' step : ' + str(step) + ' d_loss : ' + str(d_loss) + ' g_loss : '
                       + str(g_loss) + ' total_loss : ' + str(total_loss))
+
 
 
             # Write checkpoint files at every epoch
