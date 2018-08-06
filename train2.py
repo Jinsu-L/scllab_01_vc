@@ -17,18 +17,22 @@ def train(logdir1='logdir/default/train1', logdir2='logdir/default/train2', queu
     model = Model(mode="train2", batch_size=hp.Train2.batch_size, queue=queue)
     saver = tf.train.Saver()
     # Loss
-    loss_op = model.loss_net2()
+    loss_op = model.total_loss()
 
     # Training Scheme
     global_step = tf.Variable(0, name='global_step', trainable=False)
 
-    optimizer = tf.train.AdamOptimizer(learning_rate=hp.Train2.lr)
+    # optimizer = tf.train.AdamOptimizer(learning_rate=hp.Train2.lr)
     with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
-        var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'net/net2')
-        train_op = optimizer.minimize(loss_op, global_step=global_step, var_list=var_list)
-
+        # var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'net/net2')
+        # train_op = optimizer.minimize(loss_op, global_step=global_step, var_list=var_list)
+        train_op_d = model.D_train_step
+        train_op_g = model.G_train_step
+    g_adv_loss = model.loss_adv_g()
+    d_adv_loss = model.loss_adv_d()
+    total_adv_loss = model.loss_adv()
     # Summary
-    summ_op = summaries(loss_op)
+    summ_op = summaries(total_adv_loss)
 
     session_conf = tf.ConfigProto(
         gpu_options=tf.GPUOptions(
@@ -48,15 +52,19 @@ def train(logdir1='logdir/default/train1', logdir2='logdir/default/train2', queu
         for epoch in range(1, hp.Train2.num_epochs + 1):
             mfcc_batch,spec_batch,mel_batch=get_batch(model.mode)
             for step in range(model.num_batch):
-                print('epoch : ' + str(epoch) + ' step : ' + str(step))
-                if queue:
-                    sess.run(train_op)
-                else:
-                    mfcc=mfcc_batch[step*model.batch_size:(step+1)*model.batch_size]
-                    spec=spec_batch[step*model.batch_size:(step+1)*model.batch_size]
-                    mel=mel_batch[step*model.batch_size:(step+1)*model.batch_size]
-                    z = np.random.normal(size=(model.batch_size, np.shape(mfcc)[1], hp.Train2.noize_depth))
-                    sess.run(train_op, feed_dict={model.x_mfcc: mfcc, model.y_spec: spec, model.y_mel: mel, model.z: z})
+                # if queue:
+                #     sess.run(train_op)
+                # else:
+                mfcc, spec, mel = get_batch(model.mode, model.batch_size)
+                z = np.random.normal(size=(model.batch_size, np.shape(mfcc)[1], hp.Train2.noise_depth))
+                sess.run([train_op_d, train_op_g],
+                         feed_dict={model.x_mfcc: mfcc, model.y_spec: spec, model.y_mel: mel, model.z: z})
+                d_loss, g_loss, total_loss = sess.run([d_adv_loss, g_adv_loss,total_adv_loss],
+                         feed_dict={model.x_mfcc: mfcc, model.y_spec: spec, model.y_mel: mel, model.z: z})
+                print('epoch : ' + str(epoch) + ' step : ' + str(step) + ' d_loss : ' + str(d_loss) + ' g_loss : '
+                      + str(g_loss) + ' total_loss : ' + str(total_loss))
+
+
 
             # Write checkpoint files at every epoch
             if queue:
@@ -66,8 +74,8 @@ def train(logdir1='logdir/default/train1', logdir2='logdir/default/train2', queu
                                     feed_dict={model.x_mfcc: mfcc, model.y_spec: spec, model.y_mel: mel, model.z: z})
 
             if epoch % hp.Train2.save_per_epoch == 0:
-                saver.save(sess, '{}/epoch_{}_step_{}'.format(logdir2, epoch, gs))
-
+                saver.save(sess,
+                           '{}/epoch_{}_step_{}'.format(logdir2, epoch, gs))
                 # Eval at every n epochs
                 with tf.Graph().as_default():
                     eval2.eval(logdir2, queue=False)
