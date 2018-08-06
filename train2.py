@@ -50,7 +50,6 @@ def train(logdir1='logdir/default/train1', logdir2='logdir/default/train2', queu
         threads = tf.train.start_queue_runners(coord=coord)
 
         for epoch in range(1, hp.Train2.num_epochs + 1):
-            mfcc_batch,spec_batch,mel_batch=get_batch(model.mode)
             for step in range(model.num_batch):
                 # if queue:
                 #     sess.run(train_op)
