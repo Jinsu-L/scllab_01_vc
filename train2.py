@@ -66,6 +66,7 @@ def train(logdir1='logdir/default/train1', logdir2='logdir/default/train2', queu
 
 
 
+
             # Write checkpoint files at every epoch
             if queue:
                 summ, gs = sess.run([summ_op, global_step])
@@ -77,8 +78,8 @@ def train(logdir1='logdir/default/train1', logdir2='logdir/default/train2', queu
                 saver.save(sess,
                            '{}/epoch_{}_step_{}'.format(logdir2, epoch, gs))
                 # Eval at every n epochs
-                with tf.Graph().as_default():
-                    eval2.eval(logdir2, queue=False)
+                # with tf.Graph().as_default():
+                #     eval2.eval(logdir2, queue=False)
 
                 # Convert at every n epochs
                 with tf.Graph().as_default():
