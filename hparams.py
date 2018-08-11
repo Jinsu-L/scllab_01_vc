@@ -78,10 +78,10 @@ class Train2:
     noise_depth = 60
 
     # train
-    batch_size = 8
+    batch_size = 32
     lr = 0.0006
     num_epochs = 10000
-    save_per_epoch = 50
+    save_per_epoch = 30
 
 
 class Test1:

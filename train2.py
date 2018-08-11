@@ -57,12 +57,16 @@ def train(logdir1='logdir/default/train1', logdir2='logdir/default/train2', queu
                 # else:
                 mfcc, spec, mel = get_batch(model.mode, model.batch_size)
                 z = np.random.normal(size=(model.batch_size, np.shape(mfcc)[1], hp.Train2.noise_depth))
-                sess.run([train_op_d, train_op_g],
-                         feed_dict={model.x_mfcc: mfcc, model.y_spec: spec, model.y_mel: mel, model.z: z})
-                d_loss, g_loss, total_loss = sess.run([d_adv_loss, g_adv_loss,total_adv_loss],
-                         feed_dict={model.x_mfcc: mfcc, model.y_spec: spec, model.y_mel: mel, model.z: z})
+		# train D
+                sess.run(train_op_d, feed_dict={model.x_mfcc: mfcc, model.y_spec: spec, model.y_mel: mel, model.z: z})
+		# train G
+                sess.run(train_op_g, feed_dict={model.x_mfcc: mfcc, model.y_spec: spec, model.y_mel: mel, model.z: z})
+                d_loss, g_loss, total_loss = sess.run([d_adv_loss, g_adv_loss,total_adv_loss],feed_dict={model.x_mfcc: mfcc, model.y_spec: spec, model.y_mel: mel, model.z: z})
                 print('epoch : ' + str(epoch) + ' step : ' + str(step) + ' d_loss : ' + str(d_loss) + ' g_loss : '
                       + str(g_loss) + ' total_loss : ' + str(total_loss))
+
+                # print(sess.run(model.real_d_logit,
+                #          feed_dict={model.x_mfcc: mfcc, model.y_spec: spec, model.y_mel: mel, model.z: z}))
 
 
 
@@ -77,8 +81,8 @@ def train(logdir1='logdir/default/train1', logdir2='logdir/default/train2', queu
                 saver.save(sess,
                            '{}/epoch_{}_step_{}'.format(logdir2, epoch, gs))
                 # Eval at every n epochs
-                with tf.Graph().as_default():
-                    eval2.eval(logdir2, queue=False)
+                #with tf.Graph().as_default():
+                #    eval2.eval(logdir2, queue=False)
 
                 # Convert at every n epochs
                 with tf.Graph().as_default():
