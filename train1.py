@@ -31,8 +31,6 @@ def train(logdir='logdir/default/train1', queue=False):
         train_op = optimizer.minimize(loss_op, global_step=global_step, var_list=var_list)
 
     # Summary
-    # for v in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'net/net1'):
-    #     tf.summary.histogram(v.name, v)
     tf.summary.scalar('net1/train/loss', loss_op)
     tf.summary.scalar('net1/train/acc', acc_op)
     summ_op = tf.summary.merge_all()
@@ -42,6 +40,7 @@ def train(logdir='logdir/default/train1', queue=False):
             allow_growth=True,
         ),
     )
+
     # Training
     with tf.Session(config=session_conf) as sess:
         # Load trained model

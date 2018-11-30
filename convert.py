@@ -42,18 +42,9 @@ def convert(logdir='logdir/default/train2', queue=False):
 
         gs = Model.get_global_step(logdir)
 
-        # if queue:
-        #     pred_log_specs, y_log_spec, ppgs = sess.run([model(), model.y_spec, model.ppgs])
-        # else:
         mfcc, spec, mel = get_wav_batch(model.mode, model.batch_size)
         z = np.random.normal(size=(model.batch_size, np.shape(mfcc)[1], hp.Train2.noise_depth))
         pred_log_specs, y_log_spec, ppgs = sess.run([model(), model.y_spec, model.ppgs], feed_dict={model.x_mfcc: mfcc, model.y_spec: spec, model.y_mel: mel, model.z: z})
-
-        # Denormalizatoin
-        # pred_log_specs = hp.mean_log_spec + hp.std_log_spec * pred_log_specs
-        # y_log_spec = hp.mean_log_spec + hp.std_log_spec * y_log_spec
-        # pred_log_specs = hp.min_log_spec + (hp.max_log_spec - hp.min_log_spec) * pred_log_specs
-        # y_log_spec = hp.min_log_spec + (hp.max_log_spec - hp.min_log_spec) * y_log_spec
 
         # Convert log of magnitude to magnitude
         pred_specs, y_specs = np.e ** pred_log_specs, np.e ** y_log_spec
@@ -63,8 +54,6 @@ def convert(logdir='logdir/default/train2', queue=False):
         y_specs = np.power(y_specs, hp.Convert.emphasis_magnitude)
 
         # Spectrogram to waveform
-        # audio = np.array(map(lambda spec: spectrogram2wav(spec.T, hp_default.n_fft, hp_default.win_length, hp_default.hop_length, hp_default.n_iter), pred_specs))
-        # y_audio = np.array(map(lambda spec: spectrogram2wav(spec.T, hp_default.n_fft, hp_default.win_length, hp_default.hop_length, hp_default.n_iter), y_specs))
         audioWavList=[]
         y_audioWavList =[]
         for i in range(len(pred_specs)):
@@ -72,6 +61,7 @@ def convert(logdir='logdir/default/train2', queue=False):
             y_audioWavList.append(spectrogram2wav(y_specs[i].T, hp_default.n_fft, hp_default.win_length, hp_default.hop_length, hp_default.n_iter))
         audio = np.array(audioWavList)
         y_audio = np.array(y_audioWavList)
+        
         # Apply inverse pre-emphasis
         audio = inv_preemphasis(audio, coeff=hp_default.preemphasis)
         y_audio = inv_preemphasis(y_audio, coeff=hp_default.preemphasis)
@@ -89,7 +79,8 @@ def convert(logdir='logdir/default/train2', queue=False):
         heatmap = np.expand_dims(ppgs, 3)  # channel=1
         tf.summary.image('PPG', heatmap, max_outputs=ppgs.shape[0])
 
-        writer.add_summary(sess.run(tf.summary.merge_all()), global_step=gs)
+        writer.add_summary(sess.run(tf.summary.merge_all(),
+                                    feed_dict={model.x_mfcc: mfcc, model.y_spec: spec, model.y_mel: mel, model.z: z}), global_step=gs)
         writer.close()
 
         coord.request_stop()

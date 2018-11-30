@@ -1,13 +1,36 @@
-# Voice Conversion with Non-Parallel Data
+# Voice Conversion using Generative Adversarial Nets conditioned by Phonetic Posterior Grams
 
-GAN 으로 수정한다.
+##1.Prepare Phase
+###1)Set Path
+###2)Set HyperParameter
+###3)install requirements
+Builtin library
+tensorflow >= 1.1
+numpy >= 1.11.1
+librosa == 0.5.1
+soundfile
+tqdm
 
-이슈 보고 해결해라
+External library
+libav-tools
 
-할 일 찾아서 이슈에 남겨라
+##2.Train Phase
 
-자기 브랜치 따서 작업하는 거 잊지마라
+###1)Train1 (SR Model)
+python3 train1.py 'SR Model Directory Name'
 
-현재 노이즈를 placeholder로 넣어서 중간에 ppgs 랑 concat해서 하게 되어있음 model에서 Queue는 안쓸꺼다
+###2)Train2 (Synthesis Model)
+python3 train2.py 'SR Model Directory Name' 'Synthesis Model Directory Name'
 
-참고 : GAN, cGAN, SEGAN, WaveGAN 코드 
+
+##3.Evaluate Phase
+
+###1)Eval1 (SR Model)
+python3 eval1.py 'SR Model Directory Name'
+
+###2)Eval2 (Synthesis Model)
+python3 eval2.py 'SR Model Directory Name' 'Synthesis Model Directory Name'
+
+##4.Convert Phase
+python3 convert.py 'Synthesis Model Directory Name'
+

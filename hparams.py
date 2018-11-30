@@ -1,14 +1,8 @@
 # -*- coding: utf-8 -*-
-#/usr/bin/python2
 
 # path
-## local
 data_path_base = './datasets'
 logdir_path = './logdir'
-
-## remote
-# data_path_base = '/data/private/vc/datasets'
-# logdir_path = '/data/private/vc/logdir'
 
 
 class Default:
@@ -79,9 +73,10 @@ class Train2:
 
     # train
     batch_size = 8
-    lr = 0.0006
-    num_epochs = 10000
-    save_per_epoch = 50
+    lr = 2e-4
+    num_epochs = 1000
+    save_per_epoch = 10
+
 
 
 class Test1:
@@ -99,7 +94,7 @@ class Test2:
 
 class Convert:
     # path
-    data_path = '{}/arctic/bdl/*.wav'.format(data_path_base)
+    data_path = '{}/convert/*.wav'.format(data_path_base)
 
     # convert
     batch_size = 2

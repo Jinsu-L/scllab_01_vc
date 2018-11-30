@@ -107,10 +107,6 @@ def _get_mfcc_log_spec_and_log_mel_spec(wav, preemphasis_coeff, n_fft, win_lengt
     mag = np.log(mag + sys.float_info.epsilon)
     mel = np.log(mel + sys.float_info.epsilon)
 
-    # Normalization
-    # self.y_log_spec = (y_log_spec - hp.mean_log_spec) / hp.std_log_spec
-    # self.y_log_spec = (y_log_spec - hp.min_log_spec) / (hp.max_log_spec - hp.min_log_spec)
-
     return mfccs.T, mag.T, mel.T  # (t, n_mfccs), (t, 1+n_fft/2), (t, n_mels)
 
 

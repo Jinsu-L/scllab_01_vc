@@ -22,23 +22,26 @@ def train(logdir1='logdir/default/train1', logdir2='logdir/default/train2', queu
     # Training Scheme
     global_step = tf.Variable(0, name='global_step', trainable=False)
 
-    # optimizer = tf.train.AdamOptimizer(learning_rate=hp.Train2.lr)
     with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
-        # var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'net/net2')
-        # train_op = optimizer.minimize(loss_op, global_step=global_step, var_list=var_list)
         train_op_d = model.D_train_step
         train_op_g = model.G_train_step
     g_adv_loss = model.loss_adv_g()
     d_adv_loss = model.loss_adv_d()
     total_adv_loss = model.loss_adv()
+
     # Summary
-    summ_op = summaries(total_adv_loss)
+    tf.summary.scalar('net2/train/g_adv_loss', model.G_adv_loss)
+    tf.summary.scalar('net2/train/total_g', g_adv_loss)
+    tf.summary.scalar('net2/train/d_adv_loss', d_adv_loss)
+    tf.summary.scalar('net2/train/reconstruction', model.net_G_loss)
+    summ_op = tf.summary.merge_all()
 
     session_conf = tf.ConfigProto(
         gpu_options=tf.GPUOptions(
             allow_growth=True,
         ),
     )
+
     # Training
     with tf.Session(config=session_conf) as sess:
         # Load trained model
@@ -49,42 +52,38 @@ def train(logdir1='logdir/default/train1', logdir2='logdir/default/train2', queu
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(coord=coord)
 
+        gs = 0
+        K = 3
         for epoch in range(1, hp.Train2.num_epochs + 1):
             for step in range(model.num_batch):
-                # if queue:
-                #     sess.run(train_op)
-                # else:
                 mfcc, spec, mel = get_batch(model.mode, model.batch_size)
                 z = np.random.normal(size=(model.batch_size, np.shape(mfcc)[1], hp.Train2.noise_depth))
-                sess.run([train_op_d, train_op_g],
+		        # train Discriminator
+                sess.run(train_op_d,
                          feed_dict={model.x_mfcc: mfcc, model.y_spec: spec, model.y_mel: mel, model.z: z})
-                d_loss, g_loss, total_loss = sess.run([d_adv_loss, g_adv_loss,total_adv_loss],
-                         feed_dict={model.x_mfcc: mfcc, model.y_spec: spec, model.y_mel: mel, model.z: z})
-                print('epoch : ' + str(epoch) + ' step : ' + str(step) + ' d_loss : ' + str(d_loss) + ' g_loss : '
-                      + str(g_loss) + ' total_loss : ' + str(total_loss))
 
+		        # train Generator
+                if step % K != 0:
+                    sess.run(train_op_g,
+                             feed_dict={model.x_mfcc: mfcc, model.y_spec: spec, model.y_mel: mel, model.z: z})
 
+                # Write checkpoint files
+                if (gs % 10) == 0:
+                    summ = sess.run(summ_op, feed_dict={model.x_mfcc: mfcc, model.y_spec: spec, model.y_mel: mel, model.z: z})
+                    writer.add_summary(summ, global_step=gs)
 
+                print('epoch : ' + str(epoch) + ' step : ' + str(step))
 
-            # Write checkpoint files at every epoch
-            if queue:
-                summ, gs = sess.run([summ_op, global_step])
-            else:
-                summ, gs = sess.run([summ_op, global_step],
-                                    feed_dict={model.x_mfcc: mfcc, model.y_spec: spec, model.y_mel: mel, model.z: z})
+                gs += 1
 
             if epoch % hp.Train2.save_per_epoch == 0:
                 saver.save(sess,
                            '{}/epoch_{}_step_{}'.format(logdir2, epoch, gs))
-                # Eval at every n epochs
-                # with tf.Graph().as_default():
-                #     eval2.eval(logdir2, queue=False)
 
                 # Convert at every n epochs
                 with tf.Graph().as_default():
                     convert.convert(logdir2, queue=False)
 
-            writer.add_summary(summ, global_step=gs)
 
         writer.close()
         coord.request_stop()
@@ -92,8 +91,6 @@ def train(logdir1='logdir/default/train1', logdir2='logdir/default/train2', queu
 
 
 def summaries(loss):
-    # for v in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'net/net2'):
-    #     tf.summary.histogram(v.name, v)
     tf.summary.scalar('net2/train/loss', loss)
     return tf.summary.merge_all()
 
